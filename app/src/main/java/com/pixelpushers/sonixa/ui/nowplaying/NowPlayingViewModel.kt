@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -49,6 +50,8 @@ class NowPlayingViewModel @Inject constructor(
 
     private var sleepTimerJob: Job? = null
 
+    private var hasRestoredLastPlayed = false
+
     init {
         // Observe database changes so queue and currentSong are always in sync with DB updates
         viewModelScope.launch {
@@ -64,6 +67,43 @@ class NowPlayingViewModel @Inject constructor(
                         queue = updatedQueue
                     )
                 }
+
+                // Restore last played song if not loaded yet and settings allow
+                if (!hasRestoredLastPlayed && allSongs.isNotEmpty()) {
+                    hasRestoredLastPlayed = true
+                    try {
+                        val settings = userSettingsRepository.userSettingsFlow.first()
+                        if (settings.resumePlaybackOnStart && settings.lastPlayedSongId != -1L) {
+                            val targetSong = songMap[settings.lastPlayedSongId]
+                            if (targetSong != null) {
+                                val index = allSongs.indexOf(targetSong).coerceAtLeast(0)
+                                val currentState = _playerState.value
+                                _playerState.value = currentState.copy(
+                                    currentSong = targetSong,
+                                    isPlaying = true,
+                                    currentPositionMs = settings.lastPlayedPositionMs,
+                                    totalDurationMs = targetSong.duration,
+                                    queue = allSongs,
+                                    currentIndex = index
+                                )
+                                musicPlayerManager.playQueue(allSongs, index)
+                                musicPlayerManager.seekTo(settings.lastPlayedPositionMs)
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        // Periodically save last played state
+        viewModelScope.launch {
+            while (true) {
+                delay(3000)
+                val state = _playerState.value
+                val song = state.currentSong
+                if (song != null) {
+                    userSettingsRepository.saveLastPlayedState(song.id, state.currentPositionMs)
+                }
             }
         }
 
@@ -78,6 +118,23 @@ class NowPlayingViewModel @Inject constructor(
                 )
                 if (playbackState.isPlaying) {
                     userSettingsRepository.recordListeningTime(500L, notificationRepository)
+                }
+            }
+        }
+
+        // Observe queue index transitions from MusicPlayerManager (ExoPlayer auto-advance)
+        viewModelScope.launch {
+            musicPlayerManager.currentMediaIndex.collect { mediaIndex ->
+                val state = _playerState.value
+                if (state.queue.isNotEmpty() && mediaIndex in state.queue.indices && mediaIndex != state.currentIndex) {
+                    val nextSong = state.queue[mediaIndex]
+                    _playerState.value = state.copy(
+                        currentIndex = mediaIndex,
+                        currentSong = nextSong,
+                        totalDurationMs = nextSong.duration,
+                        currentPositionMs = 0L
+                    )
+                    songDao.incrementPlayCount(nextSong.id)
                 }
             }
         }
@@ -100,7 +157,8 @@ class NowPlayingViewModel @Inject constructor(
         }
 
         val index = playlist.indexOf(song).coerceAtLeast(0)
-        _playerState.value = PlayerState(
+        val currentState = _playerState.value
+        _playerState.value = currentState.copy(
             currentSong = song,
             isPlaying = true,
             currentPositionMs = 0L,
@@ -109,7 +167,7 @@ class NowPlayingViewModel @Inject constructor(
             currentIndex = index
         )
 
-        musicPlayerManager.play(song.uri, song.title, song.artist, song.artworkUri)
+        musicPlayerManager.playQueue(playlist, index)
 
         viewModelScope.launch {
             songDao.incrementPlayCount(song.id)
@@ -126,26 +184,11 @@ class NowPlayingViewModel @Inject constructor(
     }
 
     fun skipToNext() {
-        val state = _playerState.value
-        if (state.queue.isNotEmpty()) {
-            val nextIndex = when (state.repeatMode) {
-                RepeatMode.ONE -> state.currentIndex
-                RepeatMode.ALL -> (state.currentIndex + 1) % state.queue.size
-                RepeatMode.OFF -> {
-                    if (state.currentIndex == state.queue.size - 1) return
-                    (state.currentIndex + 1) % state.queue.size
-                }
-            }
-            playSong(state.queue[nextIndex], state.queue)
-        }
+        musicPlayerManager.skipToNext()
     }
 
     fun skipToPrevious() {
-        val state = _playerState.value
-        if (state.queue.isNotEmpty()) {
-            val prevIndex = if (state.currentIndex - 1 < 0) state.queue.size - 1 else state.currentIndex - 1
-            playSong(state.queue[prevIndex], state.queue)
-        }
+        musicPlayerManager.skipToPrevious()
     }
 
     fun toggleShuffle() {

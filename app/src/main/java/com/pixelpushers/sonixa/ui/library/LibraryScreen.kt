@@ -1,5 +1,6 @@
 package com.pixelpushers.sonixa.ui.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -51,6 +52,8 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -95,6 +98,7 @@ import com.pixelpushers.sonixa.data.local.entity.PlaylistEntity
 import com.pixelpushers.sonixa.data.local.entity.SongEntity
 import com.pixelpushers.sonixa.data.repository.AppNotification
 import com.pixelpushers.sonixa.data.repository.NotificationCategory
+import com.pixelpushers.sonixa.ui.components.formatFolderNameAndPath
 import com.pixelpushers.sonixa.ui.playlists.AddToPlaylistSheet
 import com.pixelpushers.sonixa.ui.theme.SonixaTheme
 import java.io.File
@@ -120,10 +124,28 @@ fun LibraryScreen(
     isNowPlayingPillPresent: Boolean = false,
     onRescanMusic: () -> Unit = {},
     onChooseFolders: () -> Unit = {},
+    pinnedAlbums: Set<String> = emptySet(),
+    pinnedArtists: Set<String> = emptySet(),
+    pinnedFolders: Set<String> = emptySet(),
+    onTogglePinAlbum: (String) -> Unit = {},
+    onTogglePinArtist: (String) -> Unit = {},
+    onTogglePinFolder: (String) -> Unit = {},
 ) {
     var selectedSection by remember { mutableStateOf(LibrarySection.SONGS) }
     var selectedAlbumName by remember { mutableStateOf<String?>(null) }
+    var selectedArtistName by remember { mutableStateOf<String?>(null) }
+    var selectedFolderPath by remember { mutableStateOf<String?>(null) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
+
+    if (selectedAlbumName != null) {
+        BackHandler { selectedAlbumName = null }
+    }
+    if (selectedArtistName != null) {
+        BackHandler { selectedArtistName = null }
+    }
+    if (selectedFolderPath != null) {
+        BackHandler { selectedFolderPath = null }
+    }
 
     var libraryViewType by remember { mutableStateOf(LibraryViewType.LIST) }
     var isBulkSelectActive by remember { mutableStateOf(false) }
@@ -349,11 +371,15 @@ fun LibraryScreen(
                     if (libraryViewType == LibraryViewType.GRID) {
                         AlbumsGrid(
                             songs = songs,
+                            pinnedAlbums = pinnedAlbums,
+                            onTogglePin = onTogglePinAlbum,
                             onAlbumClick = { albumName -> selectedAlbumName = albumName }
                         )
                     } else {
                         AlbumsList(
                             songs = songs,
+                            pinnedAlbums = pinnedAlbums,
+                            onTogglePin = onTogglePinAlbum,
                             onAlbumClick = { albumName -> selectedAlbumName = albumName }
                         )
                     }
@@ -361,9 +387,19 @@ fun LibraryScreen(
 
                 LibrarySection.ARTISTS -> {
                     if (libraryViewType == LibraryViewType.LIST) {
-                        ArtistsList(songs = songs)
+                        ArtistsList(
+                            songs = songs,
+                            pinnedArtists = pinnedArtists,
+                            onTogglePin = onTogglePinArtist,
+                            onArtistClick = { selectedArtistName = it }
+                        )
                     } else {
-                        ArtistsGrid(songs = songs)
+                        ArtistsGrid(
+                            songs = songs,
+                            pinnedArtists = pinnedArtists,
+                            onTogglePin = onTogglePinArtist,
+                            onArtistClick = { selectedArtistName = it }
+                        )
                     }
                 }
 
@@ -371,12 +407,16 @@ fun LibraryScreen(
                     if (libraryViewType == LibraryViewType.LIST) {
                         FoldersList(
                             songs = songs,
-                            onSongClick = onSongClick
+                            pinnedFolders = pinnedFolders,
+                            onTogglePin = onTogglePinFolder,
+                            onFolderClick = { selectedFolderPath = it }
                         )
                     } else {
                         FoldersGrid(
                             songs = songs,
-                            onSongClick = onSongClick
+                            pinnedFolders = pinnedFolders,
+                            onTogglePin = onTogglePinFolder,
+                            onFolderClick = { selectedFolderPath = it }
                         )
                     }
                 }
@@ -569,6 +609,220 @@ fun LibraryScreen(
                         contentPadding = PaddingValues(bottom = 140.dp)
                     ) {
                         items(albumSongs) { song ->
+                            SongRowItem(
+                                song = song,
+                                isPlaying = song.id == currentPlayingSongId,
+                                onClick = { onSongClick(song) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Artist Detail View overlay
+        selectedArtistName?.let { artistName ->
+            val artistSongs = remember(artistName, songs) { songs.filter { it.artist == artistName } }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable { }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "← Back",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { selectedArtistName = null }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = artistName,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column {
+                            Text(
+                                text = artistName,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = "${artistSongs.size} songs",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { onPlayAll(artistSongs) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.Black)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Play", color = Color.Black)
+                        }
+
+                        Button(
+                            onClick = { onShuffleAll(artistSongs) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Shuffle", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 140.dp)
+                    ) {
+                        items(artistSongs) { song ->
+                            SongRowItem(
+                                song = song,
+                                isPlaying = song.id == currentPlayingSongId,
+                                onClick = { onSongClick(song) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Folder Detail View overlay
+        selectedFolderPath?.let { folderPath ->
+            val folderSongs = remember(folderPath, songs) { songs.filter { it.folderPath == folderPath } }
+            val (folderName, displayPath) = remember(folderPath) { formatFolderNameAndPath(folderPath) }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable { }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "← Back",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { selectedFolderPath = null }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = folderName,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column {
+                            Text(
+                                text = folderName,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = displayPath,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${folderSongs.size} songs",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { onPlayAll(folderSongs) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.Black)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Play", color = Color.Black)
+                        }
+
+                        Button(
+                            onClick = { onShuffleAll(folderSongs) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Shuffle", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 140.dp)
+                    ) {
+                        items(folderSongs) { song ->
                             SongRowItem(
                                 song = song,
                                 isPlaying = song.id == currentPlayingSongId,
@@ -1088,9 +1342,11 @@ fun SongRowItem(
 @Composable
 fun AlbumsList(
     songs: List<SongEntity>,
+    pinnedAlbums: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
     onAlbumClick: (String) -> Unit
 ) {
-    val albums = remember(songs) {
+    val albums = remember(songs, pinnedAlbums) {
         songs.groupBy { it.album }
             .map { (albumName, list) ->
                 AlbumItem(
@@ -1101,6 +1357,10 @@ fun AlbumsList(
                     songCount = list.size
                 )
             }
+            .sortedWith(
+                compareByDescending<AlbumItem> { pinnedAlbums.contains(it.albumName) }
+                    .thenBy { it.albumName }
+            )
     }
 
     LazyColumn(
@@ -1108,6 +1368,7 @@ fun AlbumsList(
         modifier = Modifier.fillMaxSize()
     ) {
         items(albums) { album ->
+            val isPinned = pinnedAlbums.contains(album.albumName)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1128,14 +1389,26 @@ fun AlbumsList(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = album.albumName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = album.albumName,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
 
                     Text(
                         text = "${album.artistName} • ${album.songCount} songs",
@@ -1143,6 +1416,15 @@ fun AlbumsList(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(onClick = { onTogglePin(album.albumName) }) {
+                    Icon(
+                        imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin Album",
+                        tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -1153,9 +1435,11 @@ fun AlbumsList(
 @Composable
 fun AlbumsGrid(
     songs: List<SongEntity>,
+    pinnedAlbums: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
     onAlbumClick: (String) -> Unit
 ) {
-    val albums = remember(songs) {
+    val albums = remember(songs, pinnedAlbums) {
         songs.groupBy { it.album }
             .map { (albumName, list) ->
                 AlbumItem(
@@ -1166,6 +1450,10 @@ fun AlbumsGrid(
                     songCount = list.size
                 )
             }
+            .sortedWith(
+                compareByDescending<AlbumItem> { pinnedAlbums.contains(it.albumName) }
+                    .thenBy { it.albumName }
+            )
     }
 
     LazyVerticalGrid(
@@ -1176,21 +1464,40 @@ fun AlbumsGrid(
         modifier = Modifier.fillMaxSize()
     ) {
         items(albums) { album ->
+            val isPinned = pinnedAlbums.contains(album.albumName)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onAlbumClick(album.albumName) }
             ) {
-                AsyncImage(
-                    model = album.artworkUri,
-                    contentDescription = album.albumName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
+                Box {
+                    AsyncImage(
+                        model = album.artworkUri,
+                        contentDescription = album.albumName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+
+                    IconButton(
+                        onClick = { onTogglePin(album.albumName) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(32.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = "Pin Album",
+                            tint = if (isPinned) MaterialTheme.colorScheme.primary else Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -1216,8 +1523,13 @@ fun AlbumsGrid(
 }
 
 @Composable
-fun ArtistsList(songs: List<SongEntity>) {
-    val artists = remember(songs) {
+fun ArtistsList(
+    songs: List<SongEntity>,
+    pinnedArtists: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
+    onArtistClick: (String) -> Unit
+) {
+    val artists = remember(songs, pinnedArtists) {
         songs.groupBy { it.artist }
             .map { (artistName, list) ->
                 ArtistItem(
@@ -1226,6 +1538,10 @@ fun ArtistsList(songs: List<SongEntity>) {
                     albumCount = list.map { it.album }.distinct().size
                 )
             }
+            .sortedWith(
+                compareByDescending<ArtistItem> { pinnedArtists.contains(it.artistName) }
+                    .thenBy { it.artistName }
+            )
     }
 
     LazyColumn(
@@ -1233,9 +1549,11 @@ fun ArtistsList(songs: List<SongEntity>) {
         modifier = Modifier.fillMaxSize()
     ) {
         items(artists) { artist ->
+            val isPinned = pinnedArtists.contains(artist.artistName)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onArtistClick(artist.artistName) }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1255,17 +1573,41 @@ fun ArtistsList(songs: List<SongEntity>) {
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                Column {
-                    Text(
-                        text = artist.artistName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = artist.artistName,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
                     Text(
                         text = "${artist.songCount} songs • ${artist.albumCount} albums",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(onClick = { onTogglePin(artist.artistName) }) {
+                    Icon(
+                        imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin Artist",
+                        tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -1274,8 +1616,13 @@ fun ArtistsList(songs: List<SongEntity>) {
 }
 
 @Composable
-fun ArtistsGrid(songs: List<SongEntity>) {
-    val artists = remember(songs) {
+fun ArtistsGrid(
+    songs: List<SongEntity>,
+    pinnedArtists: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
+    onArtistClick: (String) -> Unit
+) {
+    val artists = remember(songs, pinnedArtists) {
         songs.groupBy { it.artist }
             .map { (artistName, list) ->
                 ArtistItem(
@@ -1284,6 +1631,10 @@ fun ArtistsGrid(songs: List<SongEntity>) {
                     albumCount = list.map { it.album }.distinct().size
                 )
             }
+            .sortedWith(
+                compareByDescending<ArtistItem> { pinnedArtists.contains(it.artistName) }
+                    .thenBy { it.artistName }
+            )
     }
 
     LazyVerticalGrid(
@@ -1294,11 +1645,13 @@ fun ArtistsGrid(songs: List<SongEntity>) {
         modifier = Modifier.fillMaxSize()
     ) {
         items(artists) { artist ->
+            val isPinned = pinnedArtists.contains(artist.artistName)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .clickable { onArtistClick(artist.artistName) }
                     .padding(16.dp)
             ) {
                 Column(
@@ -1322,14 +1675,26 @@ fun ArtistsGrid(songs: List<SongEntity>) {
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Text(
-                        text = artist.artistName,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = artist.artistName,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
 
                     Text(
                         text = "${artist.songCount} songs • ${artist.albumCount} albums",
@@ -1339,44 +1704,47 @@ fun ArtistsGrid(songs: List<SongEntity>) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                IconButton(
+                    onClick = { onTogglePin(artist.artistName) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin Artist",
+                        tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
 }
 
-fun formatFolderNameAndPath(rawPath: String): Pair<String, String> {
-    if (rawPath.isBlank()) return Pair("Music Library", "/Internal Storage")
-
-    val normalized = rawPath.replace("/storage/emulated/0", "Internal Storage")
-        .replace("primary:", "Internal Storage/")
-        .trimEnd('/')
-
-    val lastSegment = normalized.substringAfterLast('/')
-    val folderName = when {
-        lastSegment.isBlank() || lastSegment == "0" -> "Music Library"
-        else -> lastSegment
-    }
-
-    val displayPath = if (normalized.startsWith("Internal Storage")) "/$normalized" else normalized
-
-    return Pair(folderName, displayPath)
-}
-
 @Composable
 fun FoldersList(
     songs: List<SongEntity>,
-    onSongClick: (SongEntity) -> Unit
+    pinnedFolders: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
+    onFolderClick: (String) -> Unit
 ) {
-    val folders = remember(songs) {
+    val folders = remember(songs, pinnedFolders) {
         songs.groupBy { it.folderPath }
             .map { (path, list) ->
                 val (name, displayPath) = formatFolderNameAndPath(path)
                 FolderItem(
                     folderPath = displayPath,
                     folderName = name,
-                    songCount = list.size
+                    songCount = list.size,
+                    rawPath = path
                 )
             }
+            .sortedWith(
+                compareByDescending<FolderItem> { pinnedFolders.contains(it.rawPath) }
+                    .thenBy { it.folderName }
+            )
     }
 
     LazyColumn(
@@ -1384,9 +1752,11 @@ fun FoldersList(
         modifier = Modifier.fillMaxSize()
     ) {
         items(folders) { folder ->
+            val isPinned = pinnedFolders.contains(folder.rawPath)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onFolderClick(folder.rawPath) }
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1410,7 +1780,8 @@ fun FoldersList(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = folder.folderName,
@@ -1419,6 +1790,15 @@ fun FoldersList(
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1
                         )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(
@@ -1434,6 +1814,15 @@ fun FoldersList(
                         )
                     }
                 }
+
+                IconButton(onClick = { onTogglePin(folder.rawPath) }) {
+                    Icon(
+                        imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin Folder",
+                        tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -1442,18 +1831,25 @@ fun FoldersList(
 @Composable
 fun FoldersGrid(
     songs: List<SongEntity>,
-    onSongClick: (SongEntity) -> Unit
+    pinnedFolders: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
+    onFolderClick: (String) -> Unit
 ) {
-    val folders = remember(songs) {
+    val folders = remember(songs, pinnedFolders) {
         songs.groupBy { it.folderPath }
             .map { (path, list) ->
                 val (name, displayPath) = formatFolderNameAndPath(path)
                 FolderItem(
                     folderPath = displayPath,
                     folderName = name,
-                    songCount = list.size
+                    songCount = list.size,
+                    rawPath = path
                 )
             }
+            .sortedWith(
+                compareByDescending<FolderItem> { pinnedFolders.contains(it.rawPath) }
+                    .thenBy { it.folderName }
+            )
     }
 
     LazyVerticalGrid(
@@ -1464,11 +1860,13 @@ fun FoldersGrid(
         modifier = Modifier.fillMaxSize()
     ) {
         items(folders) { folder ->
+            val isPinned = pinnedFolders.contains(folder.rawPath)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .clickable { onFolderClick(folder.rawPath) }
                     .padding(16.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -1492,7 +1890,8 @@ fun FoldersGrid(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = folder.folderName,
@@ -1501,12 +1900,35 @@ fun FoldersGrid(
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1
                         )
+                        if (isPinned) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
 
                     Text(
                         text = "${folder.songCount} songs",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = { onTogglePin(folder.rawPath) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin Folder",
+                        tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

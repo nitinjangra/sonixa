@@ -35,7 +35,8 @@ data class ArtistItem(
 data class FolderItem(
     val folderPath: String,
     val folderName: String,
-    val songCount: Int
+    val songCount: Int,
+    val rawPath: String = folderPath
 )
 
 @HiltViewModel

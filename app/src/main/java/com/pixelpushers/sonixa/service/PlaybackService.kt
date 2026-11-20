@@ -1,14 +1,21 @@
 package com.pixelpushers.sonixa.service
 
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.pixelpushers.sonixa.data.preferences.UserSettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -22,6 +29,10 @@ class PlaybackService : MediaSessionService() {
 
     private var exoPlayer: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+
+    companion object {
+        const val ACTION_FAVORITE = "com.pixelpushers.sonixa.ACTION_FAVORITE"
+    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -45,7 +56,33 @@ class PlaybackService : MediaSessionService() {
         })
 
         exoPlayer = player
-        mediaSession = MediaSession.Builder(this, player).build()
+
+        val favoriteButton = CommandButton.Builder()
+            .setDisplayName("Favorite")
+            .setIconResId(android.R.drawable.btn_star_big_on)
+            .setSessionCommand(SessionCommand(ACTION_FAVORITE, Bundle.EMPTY))
+            .build()
+
+        mediaSession = MediaSession.Builder(this, player)
+            .setCustomLayout(listOf(favoriteButton))
+            .setCallback(object : MediaSession.Callback {
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle
+                ): ListenableFuture<SessionResult> {
+                    if (customCommand.customAction == ACTION_FAVORITE) {
+                        // Custom Favorite action handled
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+            })
+            .build()
+
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .build()
+        setMediaNotificationProvider(notificationProvider)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

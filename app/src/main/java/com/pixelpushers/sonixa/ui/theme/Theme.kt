@@ -4,9 +4,12 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import com.pixelpushers.sonixa.data.preferences.AppTheme
 
 private val DarkColorScheme = darkColorScheme(
@@ -45,10 +48,13 @@ private val BlackColorScheme = darkColorScheme(
 @Composable
 fun SonixaTheme(
     appTheme: AppTheme = AppTheme.SYSTEM,
+    materialDesignEnabled: Boolean = true,
+    materialYouEnabled: Boolean = true,
     dynamicAccentColor: Color? = null,
     content: @Composable () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
+    val context = LocalContext.current
 
     val baseColorScheme = when (appTheme) {
         AppTheme.SYSTEM -> if (isSystemDark) DarkColorScheme else LightColorScheme
@@ -57,10 +63,16 @@ fun SonixaTheme(
         AppTheme.BLACK -> BlackColorScheme
     }
 
-    val finalColorScheme = if (dynamicAccentColor != null) {
-        baseColorScheme.copy(primary = dynamicAccentColor)
-    } else {
-        baseColorScheme
+    val finalColorScheme = when {
+        materialDesignEnabled && materialYouEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (isSystemDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        dynamicAccentColor != null -> {
+            baseColorScheme.copy(primary = dynamicAccentColor)
+        }
+        else -> {
+            baseColorScheme
+        }
     }
 
     MaterialTheme(

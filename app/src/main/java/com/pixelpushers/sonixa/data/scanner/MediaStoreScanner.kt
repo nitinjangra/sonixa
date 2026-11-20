@@ -62,7 +62,18 @@ class MediaStoreScanner @Inject constructor(
             MediaStore.Audio.Media.YEAR
         )
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
+        val selection = """
+            (${MediaStore.Audio.Media.IS_MUSIC} != 0 
+             OR ${MediaStore.Audio.Media.MIME_TYPE} LIKE '%audio%' 
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.m4a'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.mp4'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.flac'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.mp3'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.wav'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.aac'
+             OR ${MediaStore.Audio.Media.DATA} LIKE '%.ogg')
+            AND ${MediaStore.Audio.Media.DURATION} >= ?
+        """.trimIndent()
         val selectionArgs = arrayOf(minDurationMs.toString())
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 

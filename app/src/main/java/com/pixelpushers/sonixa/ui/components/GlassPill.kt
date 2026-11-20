@@ -24,20 +24,20 @@ fun GlassPill(
     val shape = RoundedCornerShape(cornerRadius)
     val isDark = MaterialTheme.colorScheme.background.red < 0.5f
 
-    // Enhanced multi-stop translucent glass gradient fill
+    // High-readability frosted glass background fill with increased blur opacity
     val glassBackgroundBrush = if (isDark) {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0x45FFFFFF), // Brighter frosted top highlight
-                Color(0x1AFFFFFF), // Mid translucent body
-                Color(0xD00F1219)  // Deep frosted base
+                Color(0x60FFFFFF), // High frosted top edge
+                Color(0x30FFFFFF), // Translucent mid highlight
+                Color(0xF812151E)  // Deep frosted base for maximum readability
             )
         )
     } else {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xF5FFFFFF),
-                Color(0xE0F0F4F8)
+                Color(0xFFFFFFFF),
+                Color(0xF5F2F5F8)
             )
         )
     }
@@ -46,29 +46,29 @@ fun GlassPill(
     val glassBorderBrush = if (isDark) {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xAAFFFFFF),
-                Color(0x33FFFFFF),
-                Color(0x11FFFFFF)
+                Color(0xDDFFFFFF),
+                Color(0x55FFFFFF),
+                Color(0x22FFFFFF)
             )
         )
     } else {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0x88000000),
-                Color(0x22000000)
+                Color(0xAA000000),
+                Color(0x44000000)
             )
         )
     }
 
-    val glowSpotColor = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.4f else 0.2f)
+    val glowSpotColor = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.5f else 0.3f)
 
     Box(
         modifier = modifier
             .shadow(
-                elevation = 22.dp,
+                elevation = 24.dp,
                 shape = shape,
                 clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.6f),
+                ambientColor = Color.Black.copy(alpha = 0.7f),
                 spotColor = glowSpotColor
             )
             .clip(shape)
@@ -82,8 +82,8 @@ fun GlassPill(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = if (isDark) 0.22f else 0.4f),
-                            Color.White.copy(alpha = if (isDark) 0.04f else 0.1f),
+                            Color.White.copy(alpha = if (isDark) 0.30f else 0.50f),
+                            Color.White.copy(alpha = if (isDark) 0.08f else 0.15f),
                             Color.Transparent
                         ),
                         startY = 0f,

@@ -116,6 +116,8 @@ class MainActivity : ComponentActivity() {
 
             SonixaTheme(
                 appTheme = settings.theme,
+                materialDesignEnabled = settings.materialDesignEnabled,
+                materialYouEnabled = settings.materialYouEnabled,
                 dynamicAccentColor = settings.customThemeColor?.let { Color(it.toULong()) }
             ) {
                 MainAppContent(
@@ -245,6 +247,12 @@ fun MainAppContent(
                         isNowPlayingPillPresent = playerState.currentSong != null,
                         notifications = notifications,
                         playlists = playlists,
+                        pinnedAlbums = settings.pinnedAlbums,
+                        pinnedArtists = settings.pinnedArtists,
+                        pinnedFolders = settings.pinnedFolders,
+                        onTogglePinAlbum = { settingsViewModel.togglePinAlbum(it) },
+                        onTogglePinArtist = { settingsViewModel.togglePinArtist(it) },
+                        onTogglePinFolder = { settingsViewModel.togglePinFolder(it) },
                         onSongClick = { song -> playSongWithBehavior(song, songs) },
                         onPlayAll = { playlist -> playSongWithBehavior(playlist.first(), playlist) },
                         onShuffleAll = { playlist -> playSongWithBehavior(playlist.shuffled().first(), playlist.shuffled()) },
@@ -320,7 +328,9 @@ fun MainAppContent(
                         onRescanMusic = { settingsViewModel.rescanLibrary() },
                         onSetFilterShortTracks = { settingsViewModel.setFilterShortTracks(it) },
                         onSetVibrationEnabled = { settingsViewModel.setVibrationEnabled(it) },
-                        onChooseScanFolder = onChooseFolder
+                        onChooseScanFolder = onChooseFolder,
+                        onSetMaterialDesignEnabled = { settingsViewModel.setMaterialDesignEnabled(it) },
+                        onSetMaterialYouEnabled = { settingsViewModel.setMaterialYouEnabled(it) }
                     )
                 }
 

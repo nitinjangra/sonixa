@@ -10,6 +10,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import com.pixelpushers.sonixa.data.local.entity.SongEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,9 @@ class MusicPlayerManager @Inject constructor(
     private val _playbackState = MutableStateFlow(PlaybackStateModel())
     val playbackState: StateFlow<PlaybackStateModel> = _playbackState.asStateFlow()
 
+    private val _currentMediaIndex = MutableStateFlow(0)
+    val currentMediaIndex: StateFlow<Int> = _currentMediaIndex.asStateFlow()
+
     init {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
@@ -43,54 +47,71 @@ class MusicPlayerManager @Inject constructor(
                 mediaController = controllerFuture?.get()?.apply {
                     addListener(object : Player.Listener {
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
+                            val active = isPlaying || (playWhenReady && playbackState != Player.STATE_ENDED)
+                            _playbackState.value = _playbackState.value.copy(isPlaying = active)
                         }
 
                         override fun onPlaybackStateChanged(playbackState: Int) {
+                            val active = isPlaying || (playWhenReady && playbackState != Player.STATE_ENDED)
                             if (playbackState == Player.STATE_READY) {
                                 _playbackState.value = _playbackState.value.copy(
+                                    isPlaying = active,
                                     durationMs = duration.coerceAtLeast(0L)
                                 )
+                            } else if (playbackState == Player.STATE_ENDED) {
+                                if (hasNextMediaItem()) {
+                                    seekToNextMediaItem()
+                                    prepare()
+                                    play()
+                                } else {
+                                    _playbackState.value = _playbackState.value.copy(isPlaying = false)
+                                }
                             }
+                        }
+
+                        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                            _currentMediaIndex.value = currentMediaItemIndex.coerceAtLeast(0)
                         }
                     })
                 }
             } catch (_: Exception) {}
         }, MoreExecutors.directExecutor())
 
-        // Position ticker
         scope.launch {
             while (true) {
                 delay(500)
                 mediaController?.let { controller ->
-                    if (controller.isPlaying) {
-                        _playbackState.value = _playbackState.value.copy(
-                            currentPositionMs = controller.currentPosition.coerceAtLeast(0L),
-                            durationMs = controller.duration.coerceAtLeast(0L)
-                        )
-                    }
+                    val active = controller.isPlaying || (controller.playWhenReady && controller.playbackState != Player.STATE_ENDED)
+                    _playbackState.value = _playbackState.value.copy(
+                        isPlaying = active,
+                        currentPositionMs = controller.currentPosition.coerceAtLeast(0L),
+                        durationMs = controller.duration.coerceAtLeast(0L)
+                    )
                 }
             }
         }
     }
 
-    fun play(uri: String, title: String, artist: String, artworkUri: String?) {
+    fun playQueue(queue: List<SongEntity>, startIndex: Int) {
         scope.launch {
             try {
                 val controller = mediaController
-                if (controller != null) {
-                    val metadata = MediaMetadata.Builder()
-                        .setTitle(title)
-                        .setArtist(artist)
-                        .setArtworkUri(if (!artworkUri.isNullOrEmpty()) Uri.parse(artworkUri) else null)
-                        .build()
+                if (controller != null && queue.isNotEmpty()) {
+                    val mediaItems = queue.map { song ->
+                        val metadata = MediaMetadata.Builder()
+                            .setTitle(song.title)
+                            .setArtist(song.artist)
+                            .setArtworkUri(if (!song.artworkUri.isNullOrEmpty()) Uri.parse(song.artworkUri) else null)
+                            .build()
 
-                    val mediaItem = MediaItem.Builder()
-                        .setUri(uri)
-                        .setMediaMetadata(metadata)
-                        .build()
+                        MediaItem.Builder()
+                            .setUri(song.uri)
+                            .setMediaMetadata(metadata)
+                            .build()
+                    }
 
-                    controller.setMediaItem(mediaItem)
+                    controller.setMediaItems(mediaItems)
+                    controller.seekTo(startIndex.coerceIn(0, queue.size - 1), 0L)
                     controller.prepare()
                     controller.play()
                 }
@@ -109,6 +130,14 @@ class MusicPlayerManager @Inject constructor(
 
     fun seekTo(positionMs: Long) {
         mediaController?.seekTo(positionMs)
+    }
+
+    fun skipToNext() {
+        mediaController?.seekToNextMediaItem()
+    }
+
+    fun skipToPrevious() {
+        mediaController?.seekToPreviousMediaItem()
     }
 
     fun release() {

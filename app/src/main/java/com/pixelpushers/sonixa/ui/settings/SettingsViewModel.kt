@@ -8,6 +8,7 @@ import com.pixelpushers.sonixa.data.preferences.SongClickBehavior
 import com.pixelpushers.sonixa.data.preferences.UserSettings
 import com.pixelpushers.sonixa.data.preferences.UserSettingsRepository
 import com.pixelpushers.sonixa.data.scanner.MediaStoreScanner
+import com.pixelpushers.sonixa.util.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ import kotlin.random.Random
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: UserSettingsRepository,
-    private val scanner: MediaStoreScanner
+    private val scanner: MediaStoreScanner,
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     val settings: StateFlow<UserSettings> = settingsRepository.userSettingsFlow
@@ -35,6 +37,34 @@ class SettingsViewModel @Inject constructor(
 
     fun setVibrationEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }
+    }
+
+    fun setMaterialDesignEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setMaterialDesignEnabled(enabled) }
+    }
+
+    fun setMaterialYouEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setMaterialYouEnabled(enabled) }
+    }
+
+    fun togglePinFolder(folderPath: String) {
+        viewModelScope.launch { settingsRepository.togglePinFolder(folderPath) }
+    }
+
+    fun togglePinArtist(artistName: String) {
+        viewModelScope.launch { settingsRepository.togglePinArtist(artistName) }
+    }
+
+    fun togglePinAlbum(albumName: String) {
+        viewModelScope.launch { settingsRepository.togglePinAlbum(albumName) }
+    }
+
+    fun exportBackup(uri: android.net.Uri) {
+        viewModelScope.launch { backupManager.exportBackup(uri) }
+    }
+
+    fun restoreBackup(uri: android.net.Uri) {
+        viewModelScope.launch { backupManager.restoreBackup(uri) }
     }
 
     fun setMatchAlbumColors(enabled: Boolean) {
